@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ista Online",
+        "description": "Log ind med dine istaonline.dk-oplysninger. Prisen indtastes pr. enhed (DKK) for det aktuelle varmeår (1. maj–30. april).",
+        "data": {
+          "username": "Brugernavn",
+          "password": "Adgangskode",
+          "cons_id": "Forbruger-id (cons_id)",
+          "meter_type": "Målertype",
+          "price": "Pris pr. enhed (DKK) for indeværende varmeår"
+        },
+        "data_description": {
+          "cons_id": "Findes i din istaonline-konto/URL. Bruges til CSV-eksporten.",
+          "meter_type": "Normalt HCA (varmefordelingsmålere)."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Forny login",
+        "description": "Indtast adgangskoden igen for {username}.",
+        "data": {
+          "password": "Adgangskode"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan ikke forbinde til istaonline.dk",
+      "invalid_auth": "Forkert brugernavn eller adgangskode",
+      "unknown": "Uventet fejl"
+    },
+    "abort": {
+      "already_configured": "Denne konto er allerede konfigureret",
+      "reauth_successful": "Login blev fornyet"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Priser pr. varmeår",
+        "description": "Tilføj eller ret prisen pr. enhed for et varmeår (angiv startåret, fx 2025 for 1. maj 2025 – 30. april 2026).\n\nGemte priser:\n{prices}",
+        "data": {
+          "start_year": "Varmeår (startår)",
+          "price": "Pris pr. enhed (DKK)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "latest_reading": {
+        "name": "Seneste aflæsning"
+      },
+      "total_consumption": {
+        "name": "Samlet forbrug"
+      }
+    }
+  }
+}

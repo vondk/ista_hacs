@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ista Online",
+        "description": "Log in with your istaonline.dk credentials. Enter the unit price (DKK) for the current heating year (1 May–30 April).",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "cons_id": "Consumer id (cons_id)",
+          "meter_type": "Meter type",
+          "price": "Unit price (DKK) for the current heating year"
+        },
+        "data_description": {
+          "cons_id": "Found in your istaonline account/URL. Used for the CSV export.",
+          "meter_type": "Usually HCA (heat cost allocators)."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Re-enter the password for {username}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to istaonline.dk",
+      "invalid_auth": "Invalid username or password",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This account is already configured",
+      "reauth_successful": "Re-authentication was successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Prices per heating year",
+        "description": "Add or update the unit price for a heating year (enter the start year, e.g. 2025 for 1 May 2025 – 30 April 2026).\n\nStored prices:\n{prices}",
+        "data": {
+          "start_year": "Heating year (start year)",
+          "price": "Unit price (DKK)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "latest_reading": {
+        "name": "Latest reading"
+      },
+      "total_consumption": {
+        "name": "Total consumption"
+      }
+    }
+  }
+}
