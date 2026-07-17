@@ -19,3 +19,4 @@ jobs:
         with:
           category: integration
           ignore: brands
+          github_token: ${{ secrets.GITHUB_TOKEN }}
