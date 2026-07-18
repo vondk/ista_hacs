@@ -1,6 +1,7 @@
 {
   "domain": "ista_online",
   "name": "ista Online (DK)",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@vondk"],
   "config_flow": true,
   "documentation": "https://github.com/vondk/ista_hacs",
