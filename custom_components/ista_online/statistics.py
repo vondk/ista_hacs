@@ -12,8 +12,16 @@ import logging
 from collections import defaultdict
 from datetime import date, datetime
 
-from homeassistant.components.recorder.models import StatisticData, StatisticMetadata
+from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import async_add_external_statistics
+
+try:
+    # mean_type replaced the deprecated has_mean flag in newer Home Assistant.
+    from homeassistant.components.recorder.models import StatisticMeanType
+
+    _MEAN_TYPE_NONE: object | None = StatisticMeanType.NONE
+except ImportError:  # pragma: no cover - older HA without StatisticMeanType
+    _MEAN_TYPE_NONE = None
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
@@ -35,15 +43,20 @@ def _day_start(day: date) -> datetime:
     return dt_util.start_of_local_day(day)
 
 
-def _metadata(statistic_id: str, name: str, unit: str) -> StatisticMetadata:
-    return StatisticMetadata(
-        has_mean=False,
-        has_sum=True,
-        name=name,
-        source=DOMAIN,
-        statistic_id=statistic_id,
-        unit_of_measurement=unit,
-    )
+def _metadata(statistic_id: str, name: str, unit: str) -> StatisticMetaData:
+    meta: dict = {
+        "has_sum": True,
+        "name": name,
+        "source": DOMAIN,
+        "statistic_id": statistic_id,
+        "unit_of_measurement": unit,
+    }
+    if _MEAN_TYPE_NONE is not None:
+        meta["mean_type"] = _MEAN_TYPE_NONE
+        meta["unit_class"] = None
+    else:
+        meta["has_mean"] = False
+    return meta  # type: ignore[return-value]
 
 
 def _cumulative_series(daily: dict[date, float]) -> list[StatisticData]:

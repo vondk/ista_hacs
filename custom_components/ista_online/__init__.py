@@ -115,7 +115,6 @@ class IstaDataUpdateCoordinator(DataUpdateCoordinator[IstaSummary]):
         """Initialize."""
         self.client = client
         self.store = store
-        self.config_entry = entry
         self._readings: dict[str, Reading] = {}
         self._loaded = False
         super().__init__(
@@ -123,6 +122,7 @@ class IstaDataUpdateCoordinator(DataUpdateCoordinator[IstaSummary]):
             _LOGGER,
             name=DOMAIN,
             update_interval=UPDATE_INTERVAL,
+            config_entry=entry,
         )
 
     async def _async_load_store(self) -> None:
