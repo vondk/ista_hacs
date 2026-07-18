@@ -1,5 +1,10 @@
 # ista Online (DK) — Home Assistant integration
 
+> ⚠️ **Beta / work in progress.** Denne integration er under udvikling og er
+> kun testet i begrænset omfang. Den scraper en uofficiel ASP.NET-side, som
+> kan ændre sig uden varsel. Forvent bugs, breaking changes og manglende
+> features — brug på eget ansvar, og opret gerne et issue hvis noget fejler.
+
 Henter dit **varmeforbrug** (HCA-enheder) fra [istaonline.dk](https://www.istaonline.dk)
 ind i Home Assistant. Home Assistant har ingen "varme"-enhedstype, så forbruget
 indlæses som **gas**, så det kan vises i Energi-dashboardet.
