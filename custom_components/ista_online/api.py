@@ -176,6 +176,18 @@ def _extract_period_options(page_html: str, field_name: str) -> list[ExportPerio
     ]
 
 
+def _login_error_snippet(html: str) -> str:
+    """Best-effort visible error text from a rejected login page, for debug logs."""
+    soup = BeautifulSoup(html, "html.parser")
+    candidates = soup.find_all(
+        id=re.compile("error|valid|msg", re.I)
+    ) + soup.find_all(class_=re.compile("error|valid|msg", re.I))
+    texts = [t for tag in candidates if (t := tag.get_text(strip=True))]
+    if texts:
+        return " | ".join(dict.fromkeys(texts))[:300]
+    return soup.get_text(" ", strip=True)[:300]
+
+
 def _hidden_fields(html: str, include_text: bool = False) -> dict[str, str]:
     """Collect the ASP.NET form fields a browser would post back.
 
@@ -413,11 +425,19 @@ class IstaApiClient:
                 headers=self._headers(Referer=login_page_url),
             ) as resp:
                 resp.raise_for_status()
+                sent_ua = resp.request_info.headers.get("User-Agent")
                 result = await resp.text()
         except aiohttp.ClientError as err:
             raise IstaConnectionError(f"Login-forespørgsel fejlede: {err}") from err
 
         if 'type="password"' in result.lower():
+            _LOGGER.debug(
+                "ista login rejected: status=%s sent_ua=%r final_url=%s body_snippet=%r",
+                resp.status,
+                sent_ua,
+                resp.url,
+                _login_error_snippet(result),
+            )
             raise IstaAuthError("Login fejlede – tjek brugernavn/adgangskode")
 
         _LOGGER.debug("ista login OK for %s", self._username)
