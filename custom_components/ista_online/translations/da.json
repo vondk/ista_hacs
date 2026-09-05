@@ -3,18 +3,44 @@
     "step": {
       "user": {
         "title": "ista Online",
-        "description": "Log ind med dine istaonline.dk-oplysninger. Prisen indtastes pr. enhed (DKK) for det aktuelle varmeår (1. maj–30. april).",
+        "description": "Log ind med dine istaonline.dk-oplysninger. Forbruger-id'et (cons_id) findes automatisk efter login.",
         "data": {
           "username": "Brugernavn",
-          "password": "Adgangskode",
+          "password": "Adgangskode"
+        }
+      },
+      "meter": {
+        "title": "Vælg måler",
+        "description": "Der blev fundet flere målere/forbruger-id'er på din konto. Vælg hvilken denne integration skal bruge.",
+        "data": {
+          "cons_id": "Måler"
+        }
+      },
+      "manual": {
+        "title": "Indtast forbruger-id manuelt",
+        "description": "Der kunne ikke findes noget forbruger-id automatisk. Indtast det manuelt (findes i din istaonline-konto/URL).",
+        "data": {
           "cons_id": "Forbruger-id (cons_id)",
-          "meter_type": "Målertype",
-          "price": "Pris pr. enhed (DKK) for indeværende varmeår"
+          "meter_type": "Målertype"
         },
         "data_description": {
           "cons_id": "Findes i din istaonline-konto/URL. Bruges til CSV-eksporten.",
           "meter_type": "Normalt HCA (varmefordelingsmålere)."
         }
+      },
+      "history": {
+        "title": "Hvor meget historik?",
+        "description": "Vælg hvilken periode importen skal starte fra for forbruger-id {cons_id}. Listen er de perioder din ista-konto selv tilbyder — vælg den ældste for at hente alt. Importen kan tage et øjeblik.",
+        "data": {
+          "from_period": "Start fra periode"
+        },
+        "data_description": {
+          "from_period": "Du kan altid hente længere tilbage senere under integrationens indstillinger."
+        }
+      },
+      "prices": {
+        "title": "Priser pr. varmeår",
+        "description": "Der blev importeret {days} dage fra {meters} målere for forbruger-id {cons_id} ({meter_type}).\n\nIndtast prisen pr. enhed (DKK) for hvert varmeår. Et varmeår går fra 1. maj til 30. april, og prisen er den samme for alle målere. Lad et år stå på 0 hvis du ikke kender prisen — så beregnes der ingen omkostning for det år, og du kan udfylde det senere under indstillinger."
       },
       "reauth_confirm": {
         "title": "Forny login",
@@ -37,13 +63,36 @@
   "options": {
     "step": {
       "init": {
+        "title": "ista Online",
+        "menu_options": {
+          "prices": "Priser pr. varmeår",
+          "meter_names": "Navngiv målere",
+          "history": "Hent mere historik"
+        }
+      },
+      "prices": {
         "title": "Priser pr. varmeår",
         "description": "Tilføj eller ret prisen pr. enhed for et varmeår (angiv startåret, fx 2025 for 1. maj 2025 – 30. april 2026).\n\nGemte priser:\n{prices}",
         "data": {
           "start_year": "Varmeår (startår)",
           "price": "Pris pr. enhed (DKK)"
         }
+      },
+      "meter_names": {
+        "title": "Navngiv målere",
+        "description": "Giv hver måler et navn. Navnet bruges både til målerens enhed i Home Assistant og til dens statistikker. Feltets navn er målernummeret."
+      },
+      "history": {
+        "title": "Hent mere historik",
+        "description": "Vælg en tidligere startperiode for at hente flere år ind. Allerede hentede data bevares — der lægges kun til.",
+        "data": {
+          "from_period": "Start fra periode"
+        }
       }
+    },
+    "abort": {
+      "no_meters": "Der er endnu ingen målere at navngive — vent til den første hentning er gennemført",
+      "no_periods": "Kunne ikke læse periodelisten fra istaonline.dk"
     }
   },
   "entity": {
@@ -53,6 +102,15 @@
       },
       "total_consumption": {
         "name": "Samlet forbrug"
+      },
+      "meter_consumption": {
+        "name": "Forbrug"
+      },
+      "meter_cost": {
+        "name": "Omkostning"
+      },
+      "meter_latest_reading": {
+        "name": "Seneste aflæsning"
       }
     }
   }

@@ -1,0 +1,10 @@
+services:
+  homeassistant:
+    container_name: ista_hacs_test
+    image: ghcr.io/home-assistant/home-assistant:2024.12.0
+    volumes:
+      - /srv/docker/test/ista_hacs/.dev/ha_config:/config
+      - /srv/docker/test/ista_hacs/custom_components/ista_online:/config/custom_components/ista_online
+    ports:
+      - "1605:8123"
+    restart: unless-stopped

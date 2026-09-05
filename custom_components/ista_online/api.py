@@ -7,9 +7,11 @@ based and consumption data is obtained by driving the CSV export on PopUp.aspx.
 from __future__ import annotations
 
 import csv as _csv
+import html
 import json
 import logging
 import random
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -26,6 +28,7 @@ from .const import (
     LOGIN_URL,
     POPUP_URL,
 )
+from .prices import heating_year_bounds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,12 +60,134 @@ class Reading:
         return f"{self.meter_id}|{self.day.isoformat()}"
 
 
-def _hidden_fields(html: str) -> dict[str, str]:
-    """Collect all ASP.NET ``<input type="hidden">`` name/value pairs."""
+@dataclass(frozen=True)
+class DiscoveredMeter:
+    """A ``cons_id`` found on the logged-in dashboard page."""
+
+    meter_type: str
+    cons_id: str
+
+
+@dataclass(frozen=True)
+class ExportPeriod:
+    """One selectable entry in the export's period dropdown."""
+
+    value: str
+    label: str
+
+
+# The dashboard's "vis diagram"/"eksporter" buttons carry the real cons_id as an
+# argument to one of these inline JS handlers, e.g.
+# onclick="openTable(&#39;HCA&#39;,&#39;13958518442&#39;,&#39;&#39;);return false;"
+# ASP.NET renders the quotes as HTML entities, so the raw response text must be
+# unescaped before matching literal apostrophes.
+_CONS_ID_RE = re.compile(
+    r"open(?:Table|Chart)\('(?P<meter_type>[^']*)'\s*,\s*'(?P<cons_id>\d+)'"
+)
+
+
+def _extract_discovered_meters(page_html: str) -> list[DiscoveredMeter]:
+    """Find distinct (meter_type, cons_id) pairs on the post-login page."""
+    unescaped = html.unescape(page_html)
+    seen: dict[str, DiscoveredMeter] = {}
+    for match in _CONS_ID_RE.finditer(unescaped):
+        cons_id = match.group("cons_id")
+        if cons_id not in seen:
+            seen[cons_id] = DiscoveredMeter(
+                meter_type=match.group("meter_type") or DEFAULT_METER_TYPE,
+                cons_id=cons_id,
+            )
+    return list(seen.values())
+
+
+# The "from"/"to" period selectors on PopUp.aspx. The POST name uses "$", the
+# rendered element id the same path with "_".
+FROM_PERIOD_FIELD = "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxFromYear"
+TO_PERIOD_FIELD = "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxToYear"
+
+
+# How many heating years the dropdown offers. istaonline's selectors are
+# Telerik load-on-demand combo boxes: the page ships "itemData":[] and fetches
+# the list over AJAX, so it cannot be scraped from the HTML. The entries are
+# formulaic though -- one per heating year, newest first -- so they are
+# reproduced from the newest selectable year instead. Observed: eight entries,
+# 01.05.2019 - 30.04.2020 through 01.05.2026 - 30.04.2027.
+HISTORY_YEARS = 8
+
+_PERIOD_RE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})\s*-\s*(\d{2})\.(\d{2})\.(\d{4})")
+
+
+def _client_state_field(field_name: str) -> str:
+    """Name of the hidden state field Telerik pairs with a control."""
+    return f"{field_name.replace('$', '_')}_ClientState"
+
+
+def _combo_client_state(text: str) -> str:
+    """Client state marking ``text`` as a RadComboBox's selected item.
+
+    Posting the visible text input is not enough: the control restores its
+    selection server-side from this hidden field and falls back to ViewState --
+    the page's own default -- when it is empty. Measured against istaonline:
+    text input alone returned the default range byte for byte, while adding
+    this widened the same export from 486 to 2240 days.
+    """
+    return json.dumps(
+        {
+            "logEntries": [],
+            "value": text,
+            "text": text,
+            "enabled": True,
+            "checkedIndices": [],
+            "checkedItemsTextOverflows": False,
+        }
+    )
+
+
+def format_period(start_year: int) -> str:
+    """Render a heating year the way the export's period selector expects it."""
+    start, end = heating_year_bounds(start_year)
+    return f"{start:%d.%m.%Y} - {end:%d.%m.%Y}"
+
+
+def parse_period_year(value: str) -> int | None:
+    """Return the heating year a ``01.05.YYYY - 30.04.YYYY`` value starts in."""
+    match = _PERIOD_RE.search(value or "")
+    return int(match.group(3)) if match else None
+
+
+def _extract_period_options(page_html: str, field_name: str) -> list[ExportPeriod]:
+    """Return the periods the export can start from, newest first.
+
+    The newest selectable heating year is read off the page's own "to"
+    selector, which defaults to it; the "from" selector sits one year lower.
+    An empty list means the page could not be understood, and the caller
+    should let ista pick the range as before.
+    """
+    fields = _hidden_fields(page_html, include_text=True)
+    newest = parse_period_year(fields.get(TO_PERIOD_FIELD, ""))
+    if newest is None:
+        newest = parse_period_year(fields.get(field_name, ""))
+    if newest is None:
+        return []
+
+    return [
+        ExportPeriod(value=(period := format_period(year)), label=period)
+        for year in range(newest, newest - HISTORY_YEARS, -1)
+    ]
+
+
+def _hidden_fields(html: str, include_text: bool = False) -> dict[str, str]:
+    """Collect the ASP.NET form fields a browser would post back.
+
+    ``include_text`` is needed on PopUp.aspx: Telerik renders the period
+    selectors as ``<input type="text">`` carrying the control's POST name, so
+    hidden inputs alone miss the period entirely.
+    """
     soup = BeautifulSoup(html, "html.parser")
+    types = ["hidden", "text"] if include_text else ["hidden"]
     return {
         tag["name"]: tag.get("value", "")
-        for tag in soup.find_all("input", type="hidden")
+        for tag in soup.find_all("input", type=types)
         if tag.get("name")
     }
 
@@ -151,8 +276,10 @@ class IstaApiClient:
         hass: HomeAssistant,
         username: str,
         password: str,
-        cons_id: str,
+        cons_id: str = "",
         meter_type: str = DEFAULT_METER_TYPE,
+        from_period: str = "",
+        to_period: str = "",
     ) -> None:
         """Initialize the client."""
         self._hass = hass
@@ -160,30 +287,78 @@ class IstaApiClient:
         self._password = password
         self._cons_id = cons_id
         self._meter_type = meter_type or DEFAULT_METER_TYPE
+        self._from_period = from_period
+        self._to_period = to_period
 
-    async def async_fetch(self) -> list[Reading]:
-        """Log in and return the latest available readings.
+    def _session(self) -> aiohttp.ClientSession:
+        """Create a session with its own cookie jar, owned by this client.
+
+        ``auto_cleanup=False`` is required because we close the session
+        ourselves; otherwise Home Assistant warns about a custom integration
+        closing a session it manages.
+        """
+        return async_create_clientsession(
+            self._hass, auto_cleanup=False, headers=BROWSER_HEADERS
+        )
+
+    async def async_fetch(
+        self, from_period: str | None = None, to_period: str | None = None
+    ) -> list[Reading]:
+        """Log in and return the available readings for the configured period.
 
         A fresh aiohttp session (with its own cookie jar) is used per fetch so
         the stateful ASP.NET session is isolated to a single login/export cycle.
         """
-        session = async_create_clientsession(
-            self._hass, headers=BROWSER_HEADERS
-        )
+        session = self._session()
+        params = self._popup_params()
         try:
             await self._async_login(session)
-            raw = await self._async_export_csv(session)
+            popup_url, page = await self._async_open_popup(session, params)
+            raw = await self._async_export_csv(
+                session,
+                params,
+                popup_url,
+                page,
+                self._from_period if from_period is None else from_period,
+                self._to_period if to_period is None else to_period,
+            )
             return parse_csv(raw)
         finally:
-            await session.close()
+            session.detach()
 
     async def async_validate(self) -> bool:
         """Validate credentials by performing a full login + export."""
         await self.async_fetch()
         return True
 
-    async def _async_login(self, session: aiohttp.ClientSession) -> None:
-        """Authenticate against Tenant.aspx."""
+    async def async_discover_meters(self) -> list[DiscoveredMeter]:
+        """Log in and return the meters (cons_id/meter_type) found on the dashboard.
+
+        Only needs username/password; ``cons_id`` is not required for this.
+        """
+        session = self._session()
+        try:
+            page = await self._async_login(session)
+            return _extract_discovered_meters(page)
+        finally:
+            session.detach()
+
+    async def async_discover_periods(self) -> list[ExportPeriod]:
+        """Return the periods this login can export, newest first.
+
+        An empty list means the dropdown could not be understood; callers
+        should then let the page pick the period, as before.
+        """
+        session = self._session()
+        try:
+            await self._async_login(session)
+            _, page = await self._async_open_popup(session, self._popup_params())
+            return _extract_period_options(page, FROM_PERIOD_FIELD)
+        finally:
+            session.detach()
+
+    async def _async_login(self, session: aiohttp.ClientSession) -> str:
+        """Authenticate against Tenant.aspx and return the post-login page HTML."""
         try:
             async with session.get(LOGIN_URL) as resp:
                 resp.raise_for_status()
@@ -231,10 +406,10 @@ class IstaApiClient:
             raise IstaAuthError("Login fejlede – tjek brugernavn/adgangskode")
 
         _LOGGER.debug("ista login OK for %s", self._username)
+        return result
 
-    async def _async_export_csv(self, session: aiohttp.ClientSession) -> bytes:
-        """Drive the CSV export on PopUp.aspx and return raw CSV bytes."""
-        params = {
+    def _popup_params(self) -> dict[str, str]:
+        return {
             "Control": "PopUp_Table",
             "Metertype": self._meter_type,
             "cons_id": self._cons_id,
@@ -242,28 +417,56 @@ class IstaApiClient:
             "rwndrnd": str(random.random()),
         }
 
+    async def _async_open_popup(
+        self, session: aiohttp.ClientSession, params: dict[str, str]
+    ) -> tuple[str, str]:
+        """GET PopUp.aspx and return ``(url, html)`` for a subsequent export."""
         try:
             async with session.get(
                 POPUP_URL, params=params, headers={"Referer": LOGIN_URL}
             ) as resp:
                 resp.raise_for_status()
-                popup_url = str(resp.url)
-                page = await resp.text()
+                return str(resp.url), await resp.text()
         except aiohttp.ClientError as err:
             raise IstaConnectionError(f"Kan ikke hente PopUp.aspx: {err}") from err
 
-        fields = _hidden_fields(page)
-        from_period = fields.get(
-            "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxFromYear", ""
-        )
-        to_period = fields.get(
-            "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxToYear", ""
-        )
+    async def _async_export_csv(
+        self,
+        session: aiohttp.ClientSession,
+        params: dict[str, str],
+        popup_url: str,
+        page: str,
+        from_period: str = "",
+        to_period: str = "",
+    ) -> bytes:
+        """Drive the CSV export on PopUp.aspx and return raw CSV bytes.
+
+        An empty ``from_period``/``to_period`` keeps whatever the page has
+        selected, which is ista's own default range.
+        """
+        fields = _hidden_fields(page, include_text=True)
+        page_from = fields.get(FROM_PERIOD_FIELD, "")
+        page_to = fields.get(TO_PERIOD_FIELD, "")
+        from_period = from_period or page_from
+        to_period = to_period or page_to
+        _LOGGER.debug("ista export period: %r -> %r", from_period, to_period)
+
+        # Changing a period only takes effect through the combo's client state;
+        # leave it untouched when we are keeping the page's own selection.
+        selection = {
+            _client_state_field(field): _combo_client_state(chosen)
+            for field, chosen, current in (
+                (FROM_PERIOD_FIELD, from_period, page_from),
+                (TO_PERIOD_FIELD, to_period, page_to),
+            )
+            if chosen != current
+        }
 
         post_data = {
             **fields,
-            "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxFromYear": from_period,
-            "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxToYear": to_period,
+            **selection,
+            FROM_PERIOD_FIELD: from_period,
+            TO_PERIOD_FIELD: to_period,
             "ctl00$PopUpContentPlaceHolder$ctl00$RadComboBoxType": "Målernummer",
             "ctl00$PopUpContentPlaceHolder$ctl00$CheckBox1": "on",  # kun data
             "ctl00$PopUpContentPlaceHolder$ctl00$CheckBox2": "on",  # alle sider

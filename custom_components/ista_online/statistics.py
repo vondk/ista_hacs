@@ -33,6 +33,7 @@ from .const import (
     STAT_TOTAL_COST,
     STAT_TOTAL_ENERGY,
 )
+from .names import resolve_meter_names
 from .prices import find_price
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,33 +72,46 @@ def _cumulative_series(daily: dict[date, float]) -> list[StatisticData]:
     return points
 
 
-def _meter_statistic_id(meter_id: str) -> str:
+def meter_energy_statistic_id(meter_id: str) -> str:
+    """External statistic id for one meter's consumption."""
     return f"{DOMAIN}:meter_{meter_id}_energy"
+
+
+def meter_cost_statistic_id(meter_id: str) -> str:
+    """External statistic id for one meter's cost."""
+    return f"{DOMAIN}:meter_{meter_id}_cost"
 
 
 def async_push_statistics(
     hass: HomeAssistant,
     readings: list[Reading],
     prices: list[dict],
+    names: dict[str, str] | None = None,
 ) -> None:
     """Rebuild and push all statistics from the accumulated readings."""
     if not readings:
         _LOGGER.debug("No readings to push to statistics")
         return
 
-    # Per-meter consumption + friendly names (last-seen room wins).
+    meter_names = names or resolve_meter_names(readings)
+
     per_meter: dict[str, dict[date, float]] = defaultdict(lambda: defaultdict(float))
-    meter_names: dict[str, str] = {}
+    per_meter_cost: dict[str, dict[date, float]] = defaultdict(
+        lambda: defaultdict(float)
+    )
     total_energy: dict[date, float] = defaultdict(float)
     total_cost: dict[date, float] = defaultdict(float)
 
     for reading in readings:
         per_meter[reading.meter_id][reading.day] += reading.value
-        meter_names[reading.meter_id] = reading.room
         total_energy[reading.day] += reading.value
+        # The unit price is the same for every meter, so the per-meter costs
+        # add up to exactly the total cost.
         price = find_price(prices, reading.day)
         if price is not None:
-            total_cost[reading.day] += reading.value * price
+            cost = reading.value * price
+            per_meter_cost[reading.meter_id][reading.day] += cost
+            total_cost[reading.day] += cost
 
     # Total consumption (surfaced as gas via the m³ unit for the Energy dashboard).
     async_add_external_statistics(
@@ -114,14 +128,26 @@ def async_push_statistics(
             _cumulative_series(total_cost),
         )
 
-    # One consumption statistic per meter, named after its room.
+    # Consumption and cost per meter, named after its room / user alias.
     for meter_id, daily in per_meter.items():
         name = f"ista Online {meter_names.get(meter_id, meter_id)}"
         async_add_external_statistics(
             hass,
-            _metadata(_meter_statistic_id(meter_id), name, STAT_ENERGY_UNIT),
+            _metadata(meter_energy_statistic_id(meter_id), name, STAT_ENERGY_UNIT),
             _cumulative_series(daily),
         )
+
+        daily_cost = per_meter_cost.get(meter_id)
+        if daily_cost and any(daily_cost.values()):
+            async_add_external_statistics(
+                hass,
+                _metadata(
+                    meter_cost_statistic_id(meter_id),
+                    f"{name} omkostning",
+                    STAT_COST_UNIT,
+                ),
+                _cumulative_series(daily_cost),
+            )
 
     _LOGGER.debug(
         "Pushed statistics: total + cost + %d meters (%d readings)",

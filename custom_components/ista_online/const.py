@@ -12,6 +12,12 @@ CONF_CONS_ID: Final = "cons_id"
 CONF_METER_TYPE: Final = "meter_type"
 CONF_PRICE: Final = "price"
 CONF_PRICES: Final = "prices"
+# User-supplied per-meter display names: {meter_id: name}
+CONF_METER_NAMES: Final = "meter_names"
+# CSV export period selection (Telerik RadComboBoxFrom/ToYear values). An empty
+# string means "use whatever the popup page defaults to".
+CONF_FROM_PERIOD: Final = "from_period"
+CONF_TO_PERIOD: Final = "to_period"
 
 # Keys used inside a single price period dict stored under CONF_PRICES
 CONF_PERIOD_START: Final = "start"

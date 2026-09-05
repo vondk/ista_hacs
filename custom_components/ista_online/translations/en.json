@@ -3,18 +3,44 @@
     "step": {
       "user": {
         "title": "ista Online",
-        "description": "Log in with your istaonline.dk credentials. Enter the unit price (DKK) for the current heating year (1 May–30 April).",
+        "description": "Log in with your istaonline.dk credentials. The consumer id (cons_id) is discovered automatically after login.",
         "data": {
           "username": "Username",
-          "password": "Password",
+          "password": "Password"
+        }
+      },
+      "meter": {
+        "title": "Select meter",
+        "description": "Several meters/consumer ids were found on your account. Choose which one this integration should use.",
+        "data": {
+          "cons_id": "Meter"
+        }
+      },
+      "manual": {
+        "title": "Enter consumer id manually",
+        "description": "No consumer id could be found automatically. Enter it manually (found in your istaonline account/URL).",
+        "data": {
           "cons_id": "Consumer id (cons_id)",
-          "meter_type": "Meter type",
-          "price": "Unit price (DKK) for the current heating year"
+          "meter_type": "Meter type"
         },
         "data_description": {
           "cons_id": "Found in your istaonline account/URL. Used for the CSV export.",
           "meter_type": "Usually HCA (heat cost allocators)."
         }
+      },
+      "history": {
+        "title": "How much history?",
+        "description": "Choose which period the import should start from for consumer id {cons_id}. The list is what your ista account itself offers — pick the oldest to import everything. The import may take a moment.",
+        "data": {
+          "from_period": "Start from period"
+        },
+        "data_description": {
+          "from_period": "You can always import further back later from the integration's options."
+        }
+      },
+      "prices": {
+        "title": "Prices per heating year",
+        "description": "Imported {days} days from {meters} meters for consumer id {cons_id} ({meter_type}).\n\nEnter the unit price (DKK) for each heating year. A heating year runs from 1 May to 30 April, and the price is the same for every meter. Leave a year at 0 if you do not know the price — no cost is then calculated for that year, and you can fill it in later from the options."
       },
       "reauth_confirm": {
         "title": "Re-authenticate",
@@ -37,13 +63,36 @@
   "options": {
     "step": {
       "init": {
+        "title": "ista Online",
+        "menu_options": {
+          "prices": "Prices per heating year",
+          "meter_names": "Name the meters",
+          "history": "Import more history"
+        }
+      },
+      "prices": {
         "title": "Prices per heating year",
         "description": "Add or update the unit price for a heating year (enter the start year, e.g. 2025 for 1 May 2025 – 30 April 2026).\n\nStored prices:\n{prices}",
         "data": {
           "start_year": "Heating year (start year)",
           "price": "Unit price (DKK)"
         }
+      },
+      "meter_names": {
+        "title": "Name the meters",
+        "description": "Give each meter a name. The name is used both for the meter's device in Home Assistant and for its statistics. The field label is the meter number."
+      },
+      "history": {
+        "title": "Import more history",
+        "description": "Pick an earlier start period to import more years. Data already imported is kept — this only adds to it.",
+        "data": {
+          "from_period": "Start from period"
+        }
       }
+    },
+    "abort": {
+      "no_meters": "There are no meters to name yet — wait for the first fetch to complete",
+      "no_periods": "Could not read the period list from istaonline.dk"
     }
   },
   "entity": {
@@ -53,6 +102,15 @@
       },
       "total_consumption": {
         "name": "Total consumption"
+      },
+      "meter_consumption": {
+        "name": "Consumption"
+      },
+      "meter_cost": {
+        "name": "Cost"
+      },
+      "meter_latest_reading": {
+        "name": "Latest reading"
       }
     }
   }
