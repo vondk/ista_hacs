@@ -16,6 +16,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -41,6 +42,19 @@ async def async_setup_entry(
     """Set up the ista Online sensors."""
     coordinator = entry.runtime_data
 
+    # Created up front (rather than left to the base sensors' DeviceInfo) so its
+    # id is available immediately for the per-meter devices' via_device_id --
+    # async_add_entities() does not create devices synchronously, so relying on
+    # it would race the first call to _async_add_new_meters() below.
+    hub_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        entry_type=DeviceEntryType.SERVICE,
+        name="ista Online",
+        manufacturer="ista",
+        configuration_url="https://www.istaonline.dk",
+    )
+
     async_add_entities(
         [
             IstaLatestReadingSensor(coordinator, entry),
@@ -65,9 +79,9 @@ async def async_setup_entry(
         for meter_id in new:
             entities.extend(
                 (
-                    IstaMeterConsumptionSensor(coordinator, entry, meter_id),
-                    IstaMeterCostSensor(coordinator, entry, meter_id),
-                    IstaMeterLatestReadingSensor(coordinator, entry, meter_id),
+                    IstaMeterConsumptionSensor(coordinator, entry, meter_id, hub_device.id),
+                    IstaMeterCostSensor(coordinator, entry, meter_id, hub_device.id),
+                    IstaMeterLatestReadingSensor(coordinator, entry, meter_id, hub_device.id),
                 )
             )
         async_add_entities(entities)
@@ -156,6 +170,7 @@ class IstaMeterSensor(CoordinatorEntity[IstaDataUpdateCoordinator], SensorEntity
         coordinator: IstaDataUpdateCoordinator,
         entry: IstaConfigEntry,
         meter_id: str,
+        hub_device_id: str,
     ) -> None:
         """Initialize."""
         super().__init__(coordinator)
@@ -165,7 +180,7 @@ class IstaMeterSensor(CoordinatorEntity[IstaDataUpdateCoordinator], SensorEntity
         meter_type = entry.data.get(CONF_METER_TYPE, DEFAULT_METER_TYPE)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{entry.entry_id}_{meter_id}")},
-            via_device=(DOMAIN, entry.entry_id),
+            via_device_id=hub_device_id,
             name=meter.name if meter else meter_id,
             manufacturer="ista",
             model=METER_MODELS.get(meter_type, meter_type),
