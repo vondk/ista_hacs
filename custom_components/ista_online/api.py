@@ -308,9 +308,18 @@ class IstaApiClient:
         ``auto_cleanup=False`` is required because we close the session
         ourselves; otherwise Home Assistant warns about a custom integration
         closing a session it manages.
+
+        ``quote_cookie=False`` is required because istaonline's auth cookie
+        (``.ASPXAUTH``) contains characters (``/``, ``+``) that Python's
+        ``http.cookies`` wraps in quotes by default; ASP.NET treats those
+        quotes as part of the cookie value, silently invalidating the
+        session on every request after login.
         """
         return async_create_clientsession(
-            self._hass, auto_cleanup=False, headers=BROWSER_HEADERS
+            self._hass,
+            auto_cleanup=False,
+            headers=BROWSER_HEADERS,
+            cookie_jar=aiohttp.CookieJar(quote_cookie=False),
         )
 
     @staticmethod
