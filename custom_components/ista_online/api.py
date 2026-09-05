@@ -301,6 +301,19 @@ class IstaApiClient:
             self._hass, auto_cleanup=False, headers=BROWSER_HEADERS
         )
 
+    @staticmethod
+    def _headers(**extra: str) -> dict[str, str]:
+        """Per-request headers to send alongside the session's own.
+
+        Home Assistant's shared client-session helper always forces its own
+        ``User-Agent`` on requests, overriding whatever was passed to
+        ``async_create_clientsession`` -- the only way to still look like a
+        real browser (istaonline.dk started rejecting the Home Assistant UA
+        after adding bot detection) is to repeat ``BROWSER_HEADERS`` on every
+        individual request.
+        """
+        return {**BROWSER_HEADERS, **extra}
+
     async def async_fetch(
         self, from_period: str | None = None, to_period: str | None = None
     ) -> list[Reading]:
@@ -360,7 +373,7 @@ class IstaApiClient:
     async def _async_login(self, session: aiohttp.ClientSession) -> str:
         """Authenticate against Tenant.aspx and return the post-login page HTML."""
         try:
-            async with session.get(LOGIN_URL) as resp:
+            async with session.get(LOGIN_URL, headers=self._headers()) as resp:
                 resp.raise_for_status()
                 login_page_url = str(resp.url)
                 page = await resp.text()
@@ -395,7 +408,9 @@ class IstaApiClient:
 
         try:
             async with session.post(
-                login_page_url, data=data, headers={"Referer": login_page_url}
+                login_page_url,
+                data=data,
+                headers=self._headers(Referer=login_page_url),
             ) as resp:
                 resp.raise_for_status()
                 result = await resp.text()
@@ -423,7 +438,7 @@ class IstaApiClient:
         """GET PopUp.aspx and return ``(url, html)`` for a subsequent export."""
         try:
             async with session.get(
-                POPUP_URL, params=params, headers={"Referer": LOGIN_URL}
+                POPUP_URL, params=params, headers=self._headers(Referer=LOGIN_URL)
             ) as resp:
                 resp.raise_for_status()
                 return str(resp.url), await resp.text()
@@ -478,7 +493,7 @@ class IstaApiClient:
         try:
             async with session.post(
                 POPUP_URL, params=params, data=post_data,
-                headers={"Referer": popup_url},
+                headers=self._headers(Referer=popup_url),
             ) as resp:
                 resp.raise_for_status()
                 content_type = resp.headers.get("Content-Type", "")
