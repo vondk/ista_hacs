@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - older HA without StatisticMeanType
     _MEAN_TYPE_NONE = None
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import VolumeConverter
 
 from .api import Reading
 from .const import (
@@ -37,6 +38,12 @@ from .names import resolve_meter_names
 from .prices import find_price
 
 _LOGGER = logging.getLogger(__name__)
+
+# HA's Energy dashboard only offers a statistic as a gas source when its
+# metadata declares the "volume" unit class -- without this, m³ statistics
+# are invisible to the "select a statistic" pickers even though the unit
+# itself matches.
+_UNIT_CLASSES: dict[str, str] = {STAT_ENERGY_UNIT: VolumeConverter.UNIT_CLASS}
 
 
 def _day_start(day: date) -> datetime:
@@ -54,7 +61,7 @@ def _metadata(statistic_id: str, name: str, unit: str) -> StatisticMetaData:
     }
     if _MEAN_TYPE_NONE is not None:
         meta["mean_type"] = _MEAN_TYPE_NONE
-        meta["unit_class"] = None
+        meta["unit_class"] = _UNIT_CLASSES.get(unit)
     else:
         meta["has_mean"] = False
     return meta  # type: ignore[return-value]
