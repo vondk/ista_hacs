@@ -155,11 +155,15 @@ async def test_meter_devices_and_entities(
         await hass.async_block_till_done()
 
     dev_reg = dr.async_get(hass)
-    hub = dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    hub = dev_reg.async_get_device_by_identifier(
+        (DOMAIN, entry.entry_id), entry.entry_id
+    )
     assert hub is not None
     assert hub.entry_type is dr.DeviceEntryType.SERVICE
 
-    device = dev_reg.async_get_device(identifiers={(DOMAIN, f"{entry.entry_id}_111")})
+    device = dev_reg.async_get_device_by_identifier(
+        (DOMAIN, f"{entry.entry_id}_111"), entry.entry_id
+    )
     assert device is not None
     assert device.name == "Soveværelse"
     assert device.serial_number == "111"
